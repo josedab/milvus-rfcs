@@ -83,6 +83,47 @@ func calBySegmentSizePolicy(schema *schemapb.CollectionSchema, segmentSize int64
 	return int(segmentSize) / sizePerRecord, nil
 }
 
+// calByIndexTypePolicy calculates segment size based on index type characteristics
+// Different index types have different optimal segment sizes for build and query performance
+func calByIndexTypePolicy(meta *meta, collectionID int64, schema *schemapb.CollectionSchema) (int, error) {
+	if schema == nil {
+		return -1, errors.New("nil schema")
+	}
+	sizePerRecord, err := typeutil.EstimateSizePerRecord(schema)
+	if err != nil {
+		return -1, err
+	}
+	// check zero value, preventing panicking
+	if sizePerRecord == 0 {
+		return -1, errors.New("zero size record schema found")
+	}
+
+	// Get all indexes for this collection
+	indexInfos := meta.indexMeta.GetIndexesForCollection(collectionID, "")
+
+	// Determine optimal segment size based on index types
+	var optimalSizeMB float64
+	if len(indexInfos) == 0 {
+		// No indexes yet, use default size
+		optimalSizeMB = Params.DataCoordCfg.SegmentMaxSize.GetAsFloat()
+	} else {
+		// Find the most restrictive (smallest) optimal size among all indexes
+		// This ensures compatibility when multiple vector fields have different index types
+		optimalSizeMB = Params.DataCoordCfg.SegmentMaxSize.GetAsFloat()
+		for _, indexInfo := range indexInfos {
+			indexType := GetIndexType(indexInfo.IndexParams)
+			indexOptimalSize := getOptimalSegmentSizeForIndexType(indexType)
+			// Use the smaller size to be conservative
+			if indexOptimalSize < optimalSizeMB {
+				optimalSizeMB = indexOptimalSize
+			}
+		}
+	}
+
+	threshold := optimalSizeMB * 1024 * 1024 // Convert MB to bytes
+	return int(threshold / float64(sizePerRecord)), nil
+}
+
 // AllocatePolicy helper function definition to allocate Segment space
 type AllocatePolicy func(segments []*SegmentInfo, count int64,
 	maxCountPerL1Segment int64, level datapb.SegmentLevel) ([]*Allocation, []*Allocation)

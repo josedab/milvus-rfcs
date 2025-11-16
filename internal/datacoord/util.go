@@ -229,6 +229,24 @@ func isDiskANNIndex(indexType string) bool {
 	return vecindexmgr.GetVecIndexMgrInstance().IsDiskANN(indexType)
 }
 
+// getOptimalSegmentSizeForIndexType returns the optimal segment size in MB based on index type
+func getOptimalSegmentSizeForIndexType(indexType string) float64 {
+	switch indexType {
+	case "HNSW":
+		// HNSW performs better with smaller segments due to graph construction overhead
+		return 256 // 256MB
+	case "IVF_FLAT", "IVF_SQ8", "IVF_SQ8_HYBRID", "IVF_PQ":
+		// IVF variants benefit from larger segments for better clustering
+		return 1024 // 1GB
+	case "DiskANN":
+		// DiskANN uses configured disk segment size
+		return Params.DataCoordCfg.DiskSegmentMaxSize.GetAsFloat()
+	default:
+		// Default to standard segment size for other index types
+		return Params.DataCoordCfg.SegmentMaxSize.GetAsFloat()
+	}
+}
+
 func parseBuildIDFromFilePath(key string) (UniqueID, error) {
 	ss := strings.Split(key, "/")
 	if strings.HasSuffix(key, "/") {

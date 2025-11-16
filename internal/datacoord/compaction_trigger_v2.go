@@ -650,13 +650,25 @@ func (m *CompactionTriggerManager) SubmitSingleViewToScheduler(ctx context.Conte
 }
 
 func getExpectedSegmentSize(meta *meta, collectionID int64, schema *schemapb.CollectionSchema) int64 {
-	allDiskIndex := meta.indexMeta.AllDenseWithDiskIndex(collectionID, schema)
-	if allDiskIndex {
-		// Only if all dense vector fields index type are DiskANN, recalc segment max size here.
-		return Params.DataCoordCfg.DiskSegmentMaxSize.GetAsInt64() * 1024 * 1024
+	// Get all indexes for this collection
+	indexInfos := meta.indexMeta.GetIndexesForCollection(collectionID, "")
+
+	// Determine optimal segment size based on index types
+	// Use the most restrictive (smallest) size among all indexes
+	optimalSizeMB := Params.DataCoordCfg.SegmentMaxSize.GetAsFloat()
+
+	if len(indexInfos) > 0 {
+		for _, indexInfo := range indexInfos {
+			indexType := GetIndexType(indexInfo.IndexParams)
+			indexOptimalSize := getOptimalSegmentSizeForIndexType(indexType)
+			// Use the smaller size to ensure optimal performance for all index types
+			if indexOptimalSize < optimalSizeMB {
+				optimalSizeMB = indexOptimalSize
+			}
+		}
 	}
-	// If some dense vector fields index type are not DiskANN, recalc segment max size using default policy.
-	return Params.DataCoordCfg.SegmentMaxSize.GetAsInt64() * 1024 * 1024
+
+	return int64(optimalSizeMB * 1024 * 1024) // Convert MB to bytes
 }
 
 // chanPartSegments is an internal result struct, which is aggregates of SegmentInfos with same collectionID, partitionID and channelName

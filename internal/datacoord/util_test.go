@@ -199,3 +199,41 @@ func (suite *UtilSuite) TestCalculateL0SegmentSize() {
 
 	suite.Equal(calculateL0SegmentSize(fields), float64(logsize))
 }
+
+func (suite *UtilSuite) TestGetOptimalSegmentSizeForIndexType() {
+	// Save original config values
+	originalSegmentMaxSize := Params.DataCoordCfg.SegmentMaxSize.GetAsFloat()
+	originalDiskSegmentMaxSize := Params.DataCoordCfg.DiskSegmentMaxSize.GetAsFloat()
+
+	// Test HNSW index type - should return 256MB
+	size := getOptimalSegmentSizeForIndexType("HNSW")
+	suite.Equal(float64(256), size)
+
+	// Test IVF_FLAT index type - should return 1GB
+	size = getOptimalSegmentSizeForIndexType("IVF_FLAT")
+	suite.Equal(float64(1024), size)
+
+	// Test IVF_SQ8 index type - should return 1GB
+	size = getOptimalSegmentSizeForIndexType("IVF_SQ8")
+	suite.Equal(float64(1024), size)
+
+	// Test IVF_SQ8_HYBRID index type - should return 1GB
+	size = getOptimalSegmentSizeForIndexType("IVF_SQ8_HYBRID")
+	suite.Equal(float64(1024), size)
+
+	// Test IVF_PQ index type - should return 1GB
+	size = getOptimalSegmentSizeForIndexType("IVF_PQ")
+	suite.Equal(float64(1024), size)
+
+	// Test DiskANN index type - should return configured disk segment size
+	size = getOptimalSegmentSizeForIndexType("DiskANN")
+	suite.Equal(originalDiskSegmentMaxSize, size)
+
+	// Test unknown/default index type - should return configured default segment size
+	size = getOptimalSegmentSizeForIndexType("UNKNOWN_INDEX")
+	suite.Equal(originalSegmentMaxSize, size)
+
+	// Test empty index type - should return configured default segment size
+	size = getOptimalSegmentSizeForIndexType("")
+	suite.Equal(originalSegmentMaxSize, size)
+}

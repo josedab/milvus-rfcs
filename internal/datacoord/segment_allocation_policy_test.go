@@ -425,3 +425,114 @@ func Test_sealByBlockingL0(t *testing.T) {
 		})
 	}
 }
+
+func TestCalByIndexTypePolicy(t *testing.T) {
+	schema := &schemapb.CollectionSchema{
+		Fields: []*schemapb.FieldSchema{
+			{
+				DataType: schemapb.DataType_Int64,
+			},
+			{
+				DataType: schemapb.DataType_FloatVector,
+				TypeParams: []*commonpb.KeyValuePair{
+					{Key: common.DimKey, Value: "128"},
+				},
+			},
+		},
+	}
+
+	type testCase struct {
+		tag             string
+		indexType       string
+		expectedSizeMB  float64
+		expectErr       bool
+		collectionID    int64
+		hasIndex        bool
+	}
+
+	testCases := []testCase{
+		{
+			tag:            "hnsw_index",
+			indexType:      "HNSW",
+			expectedSizeMB: 256, // 256MB for HNSW
+			expectErr:      false,
+			collectionID:   1,
+			hasIndex:       true,
+		},
+		{
+			tag:            "ivf_flat_index",
+			indexType:      "IVF_FLAT",
+			expectedSizeMB: 1024, // 1GB for IVF_FLAT
+			expectErr:      false,
+			collectionID:   2,
+			hasIndex:       true,
+		},
+		{
+			tag:            "ivf_sq8_index",
+			indexType:      "IVF_SQ8",
+			expectedSizeMB: 1024, // 1GB for IVF_SQ8
+			expectErr:      false,
+			collectionID:   3,
+			hasIndex:       true,
+		},
+		{
+			tag:            "diskann_index",
+			indexType:      "DiskANN",
+			expectedSizeMB: Params.DataCoordCfg.DiskSegmentMaxSize.GetAsFloat(),
+			expectErr:      false,
+			collectionID:   4,
+			hasIndex:       true,
+		},
+		{
+			tag:            "no_index",
+			indexType:      "",
+			expectedSizeMB: Params.DataCoordCfg.SegmentMaxSize.GetAsFloat(),
+			expectErr:      false,
+			collectionID:   5,
+			hasIndex:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.tag, func(t *testing.T) {
+			// Create mock meta with index metadata
+			indexMeta := newIndexMeta(nil)
+			if tc.hasIndex {
+				indexMeta.indexes[tc.collectionID] = map[int64]*model.Index{
+					1: {
+						CollectionID: tc.collectionID,
+						FieldID:      2, // Vector field
+						IndexParams: []*commonpb.KeyValuePair{
+							{Key: common.IndexTypeKey, Value: tc.indexType},
+						},
+					},
+				}
+			}
+
+			meta := &meta{
+				indexMeta: indexMeta,
+			}
+
+			result, err := calByIndexTypePolicy(meta, tc.collectionID, schema)
+
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Calculate expected row count based on segment size
+				expectedThreshold := tc.expectedSizeMB * 1024 * 1024
+				expectedRows := int(expectedThreshold / float64(524)) // 524 bytes per record for this schema
+				assert.Equal(t, expectedRows, result)
+			}
+		})
+	}
+
+	// Test error cases
+	t.Run("nil_schema", func(t *testing.T) {
+		meta := &meta{
+			indexMeta: newIndexMeta(nil),
+		}
+		_, err := calByIndexTypePolicy(meta, 1, nil)
+		assert.Error(t, err)
+	})
+}
