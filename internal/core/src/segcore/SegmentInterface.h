@@ -200,12 +200,22 @@ class SegmentInterface {
 
     virtual void
     SetLoadInfo(const milvus::proto::segcore::SegmentLoadInfo& load_info) = 0;
+
+    virtual void
+    Load(milvus::tracer::TraceContext& trace_ctx) = 0;
 };
 
 // internal API for DSL calculation
 // only for implementation
 class SegmentInternalInterface : public SegmentInterface {
  public:
+    virtual void
+    prefetch_chunks(milvus::OpContext* op_ctx,
+                    FieldId field_id,
+                    const std::vector<int64_t>& chunk_ids) const {
+        // do nothing
+    }
+
     template <typename T>
     PinWrapper<Span<T>>
     chunk_data(milvus::OpContext* op_ctx,
