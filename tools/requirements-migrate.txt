@@ -1,0 +1,12 @@
+# Milvus Migration Tool Dependencies
+
+# Core dependencies
+pymilvus>=2.3.0
+
+# Source database clients
+pinecone-client>=3.0.0
+weaviate-client>=3.25.0
+qdrant-client>=1.7.0
+
+# Optional dependencies for enhanced features
+tqdm>=4.65.0  # Progress bars
