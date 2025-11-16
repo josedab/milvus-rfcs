@@ -1,0 +1,34 @@
+# Load testing results
+results/
+*.csv
+*.html
+*.log
+
+# Locust files
+locust.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Configuration (keep example)
+config.env
