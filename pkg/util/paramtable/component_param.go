@@ -2387,6 +2387,20 @@ type queryCoordConfig struct {
 	QueryNodeTaskParallelismFactor ParamItem `refreshable:"true"`
 
 	BalanceCheckCollectionMaxCount ParamItem `refreshable:"true"`
+
+	// ---- Tiered Storage ---
+	TieredStorageEnabled          ParamItem `refreshable:"false"`
+	TieredStorageHotMaxMemoryGB   ParamItem `refreshable:"false"`
+	TieredStorageWarmEnabled      ParamItem `refreshable:"false"`
+	TieredStorageWarmPath         ParamItem `refreshable:"false"`
+	TieredStorageWarmMaxSizeGB    ParamItem `refreshable:"false"`
+	TieredStorageColdEnabled      ParamItem `refreshable:"false"`
+	TieredStorageColdBucket       ParamItem `refreshable:"false"`
+	TieredStorageColdEndpoint     ParamItem `refreshable:"false"`
+	TieredStorageHotThreshold     ParamItem `refreshable:"true"`
+	TieredStorageWarmThreshold    ParamItem `refreshable:"true"`
+	TieredStorageMinAccessCount   ParamItem `refreshable:"true"`
+	TieredStorageMaxMigrationWorkers ParamItem `refreshable:"true"`
 }
 
 func (p *queryCoordConfig) init(base *BaseTable) {
@@ -3028,6 +3042,115 @@ If this parameter is set false, Milvus simply searches the growing segments with
 		Export:       false,
 	}
 	p.BalanceCheckCollectionMaxCount.Init(base.mgr)
+
+	// ---- Tiered Storage ---
+	p.TieredStorageEnabled = ParamItem{
+		Key:          "queryCoord.tieredStorage.enabled",
+		Version:      "2.6.0",
+		DefaultValue: "false",
+		Doc:          "enable tiered storage for hot/warm/cold data management",
+		Export:       true,
+	}
+	p.TieredStorageEnabled.Init(base.mgr)
+
+	p.TieredStorageHotMaxMemoryGB = ParamItem{
+		Key:          "queryCoord.tieredStorage.hotTier.maxMemoryGB",
+		Version:      "2.6.0",
+		DefaultValue: "64",
+		Doc:          "maximum memory in GB for hot tier (in-memory storage)",
+		Export:       true,
+	}
+	p.TieredStorageHotMaxMemoryGB.Init(base.mgr)
+
+	p.TieredStorageWarmEnabled = ParamItem{
+		Key:          "queryCoord.tieredStorage.warmTier.enabled",
+		Version:      "2.6.0",
+		DefaultValue: "true",
+		Doc:          "enable warm tier (SSD storage)",
+		Export:       true,
+	}
+	p.TieredStorageWarmEnabled.Init(base.mgr)
+
+	p.TieredStorageWarmPath = ParamItem{
+		Key:          "queryCoord.tieredStorage.warmTier.path",
+		Version:      "2.6.0",
+		DefaultValue: "/mnt/ssd",
+		Doc:          "path for warm tier SSD storage",
+		Export:       true,
+	}
+	p.TieredStorageWarmPath.Init(base.mgr)
+
+	p.TieredStorageWarmMaxSizeGB = ParamItem{
+		Key:          "queryCoord.tieredStorage.warmTier.maxSizeGB",
+		Version:      "2.6.0",
+		DefaultValue: "512",
+		Doc:          "maximum size in GB for warm tier (SSD storage)",
+		Export:       true,
+	}
+	p.TieredStorageWarmMaxSizeGB.Init(base.mgr)
+
+	p.TieredStorageColdEnabled = ParamItem{
+		Key:          "queryCoord.tieredStorage.coldTier.enabled",
+		Version:      "2.6.0",
+		DefaultValue: "true",
+		Doc:          "enable cold tier (object storage S3/MinIO)",
+		Export:       true,
+	}
+	p.TieredStorageColdEnabled.Init(base.mgr)
+
+	p.TieredStorageColdBucket = ParamItem{
+		Key:          "queryCoord.tieredStorage.coldTier.bucket",
+		Version:      "2.6.0",
+		DefaultValue: "milvus-cold-storage",
+		Doc:          "bucket name for cold tier object storage",
+		Export:       true,
+	}
+	p.TieredStorageColdBucket.Init(base.mgr)
+
+	p.TieredStorageColdEndpoint = ParamItem{
+		Key:          "queryCoord.tieredStorage.coldTier.endpoint",
+		Version:      "2.6.0",
+		DefaultValue: "s3.amazonaws.com",
+		Doc:          "endpoint for cold tier object storage",
+		Export:       true,
+	}
+	p.TieredStorageColdEndpoint.Init(base.mgr)
+
+	p.TieredStorageHotThreshold = ParamItem{
+		Key:          "queryCoord.tieredStorage.migration.hotThreshold",
+		Version:      "2.6.0",
+		DefaultValue: strconv.FormatInt(int64(1*time.Hour), 10),
+		Doc:          "time threshold for demotion from hot tier (in nanoseconds)",
+		Export:       true,
+	}
+	p.TieredStorageHotThreshold.Init(base.mgr)
+
+	p.TieredStorageWarmThreshold = ParamItem{
+		Key:          "queryCoord.tieredStorage.migration.warmThreshold",
+		Version:      "2.6.0",
+		DefaultValue: strconv.FormatInt(int64(24*time.Hour), 10),
+		Doc:          "time threshold for demotion from warm tier (in nanoseconds)",
+		Export:       true,
+	}
+	p.TieredStorageWarmThreshold.Init(base.mgr)
+
+	p.TieredStorageMinAccessCount = ParamItem{
+		Key:          "queryCoord.tieredStorage.migration.minAccessCount",
+		Version:      "2.6.0",
+		DefaultValue: "10",
+		Doc:          "minimum access count required for hot tier promotion",
+		Export:       true,
+	}
+	p.TieredStorageMinAccessCount.Init(base.mgr)
+
+	p.TieredStorageMaxMigrationWorkers = ParamItem{
+		Key:          "queryCoord.tieredStorage.migration.maxWorkers",
+		Version:      "2.6.0",
+		DefaultValue: "4",
+		Doc:          "maximum concurrent migration workers",
+		Export:       true,
+	}
+	p.TieredStorageMaxMigrationWorkers.Init(base.mgr)
 }
 
 // /////////////////////////////////////////////////////////////////////////////

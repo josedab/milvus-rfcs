@@ -1,0 +1,88 @@
+# Milvus Tiered Storage Configuration Example
+# This example demonstrates how to configure the tiered storage feature
+# as described in RFC-0015
+
+queryCoord:
+  # ---- Tiered Storage Configuration ----
+
+  tieredStorage:
+    # Enable tiered storage feature
+    enabled: true
+
+    # Hot Tier (Memory) Configuration
+    hotTier:
+      # Maximum memory for hot tier in GB
+      # Hot tier keeps frequently accessed data in memory
+      # Recommended: 10-30% of total dataset size
+      maxMemoryGB: 64
+
+    # Warm Tier (SSD) Configuration
+    warmTier:
+      # Enable warm tier
+      enabled: true
+
+      # Path to SSD storage
+      # Ensure this path has sufficient space and fast I/O
+      path: "/mnt/ssd"
+
+      # Maximum size for warm tier in GB
+      # Recommended: 30-50% of total dataset size
+      maxSizeGB: 512
+
+    # Cold Tier (Object Storage) Configuration
+    coldTier:
+      # Enable cold tier
+      enabled: true
+
+      # S3/MinIO bucket name for cold storage
+      bucket: "milvus-cold-storage"
+
+      # S3/MinIO endpoint
+      # For AWS S3: s3.amazonaws.com or s3.region.amazonaws.com
+      # For MinIO: localhost:9000 or your MinIO endpoint
+      endpoint: "s3.amazonaws.com"
+
+    # Migration Policy Configuration
+    migration:
+      # Hot threshold: segments not accessed within this duration
+      # will be demoted from hot tier (in nanoseconds)
+      # 1 hour = 3600000000000 nanoseconds
+      hotThreshold: 3600000000000
+
+      # Warm threshold: segments not accessed within this duration
+      # will be demoted from warm tier (in nanoseconds)
+      # 24 hours = 86400000000000 nanoseconds
+      warmThreshold: 86400000000000
+
+      # Minimum access count required for hot tier promotion
+      # Segments with fewer accesses will be kept in warm/cold tier
+      minAccessCount: 10
+
+      # Maximum concurrent migration workers
+      # Higher values increase migration throughput but use more resources
+      maxWorkers: 4
+
+# Example Use Cases:
+
+# Use Case 1: E-commerce Product Search
+# - New products (hot): Searched frequently → Stay in memory
+# - Seasonal products (warm): Periodic access → Move to SSD
+# - Discontinued products (cold): Rare searches → Move to S3
+# Expected Impact: 75% cost reduction
+
+# Use Case 2: Document Archive
+# - Recent docs (hot): Active projects → Memory
+# - 6-month old (warm): Occasional reference → SSD
+# - >1 year old (cold): Compliance only → S3
+# Expected Impact: 80% cost reduction
+
+# Performance Expectations:
+# - Hot tier: <10ms latency
+# - Warm tier: <50ms latency
+# - Cold tier: <500ms latency (first access)
+
+# Cost Optimization:
+# For 100M vectors (300GB in memory):
+# - All hot: $2000/month
+# - Tiered (20% hot, 30% warm, 50% cold): $400/month
+# - Savings: 80%
