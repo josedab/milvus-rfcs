@@ -448,6 +448,22 @@ queryCoord:
 queryNode:
   stats:
     publishInterval: 1000 # The interval that query node publishes the node statistics information, including segment status, cpu usage, memory usage, health status, etc. Unit: ms.
+  observability:
+    # Distributed tracing configuration
+    tracing:
+      enabled: true # Enable distributed tracing with OpenTelemetry
+      provider: jaeger # Tracing provider: jaeger, zipkin, or otlp
+      # Jaeger configuration
+      jaeger:
+        endpoint: http://jaeger-collector:14268/api/traces # Jaeger collector endpoint
+        # Alternative: use agent instead of collector
+        # agentHost: jaeger-agent
+        # agentPort: 6831
+      # Sampling configuration
+      samplingRate: 1.0 # Sampling rate: 1.0 = 100%, 0.1 = 10%, 0.01 = 1%
+      # Performance tuning
+      batchSize: 512 # Batch size for trace exports
+      exportTimeout: 30s # Timeout for exporting traces
   segcore:
     knowhereThreadPoolNumRatio: 4 # The number of threads in knowhere's thread pool. If disk is enabled, the pool size will multiply with knowhereThreadPoolNumRatio([1, 32]).
     chunkRows: 128 # Row count by which Segcore divides a segment into chunks.

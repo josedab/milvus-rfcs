@@ -1,0 +1,555 @@
+{
+  "dashboard": {
+    "title": "Milvus Query Profiling",
+    "description": "Distributed query profiling dashboard for Milvus QueryNode with OpenTelemetry tracing",
+    "tags": ["milvus", "querynode", "profiling", "tracing"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "version": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Query Latency Breakdown (P95)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_query_stage_duration_seconds_bucket{stage=\"parse\"}[5m])) by (le))",
+            "legendFormat": "Parse",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_query_stage_duration_seconds_bucket{stage=\"plan\"}[5m])) by (le))",
+            "legendFormat": "Plan",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_query_stage_duration_seconds_bucket{stage=\"search\"}[5m])) by (le))",
+            "legendFormat": "Search",
+            "refId": "C"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_query_stage_duration_seconds_bucket{stage=\"merge\"}[5m])) by (le))",
+            "legendFormat": "Merge",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "stack": true,
+        "fill": 2,
+        "linewidth": 2,
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "legend": {
+          "show": true,
+          "values": true,
+          "min": true,
+          "max": true,
+          "current": true,
+          "total": false,
+          "avg": true
+        }
+      },
+      {
+        "id": 2,
+        "title": "Per-Index Performance",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "avg by (index_type, collection_id) (milvus_search_latency_ms)",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "index_type": "Index Type",
+                "collection_id": "Collection",
+                "Value": "Avg Latency (ms)"
+              }
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Avg Latency (ms)",
+              "desc": true
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Segment Search Heatmap",
+        "type": "heatmap",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "milvus_segment_search_latency_ms",
+            "format": "time_series",
+            "refId": "A"
+          }
+        ],
+        "dataFormat": "tsbuckets",
+        "yAxis": {
+          "format": "short",
+          "logBase": 1,
+          "min": null,
+          "max": null,
+          "show": true
+        },
+        "xAxis": {
+          "show": true
+        },
+        "color": {
+          "mode": "spectrum",
+          "cardColor": "#b4ff00",
+          "colorScale": "sqrt",
+          "exponent": 0.5,
+          "colorScheme": "interpolateGreens"
+        },
+        "legend": {
+          "show": true
+        },
+        "tooltip": {
+          "show": true,
+          "showHistogram": true
+        }
+      },
+      {
+        "id": 4,
+        "title": "Top 20 Slow Queries",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "description": "Top 20 slowest queries with trace links to Jaeger",
+        "targets": [
+          {
+            "expr": "topk(20, sort_desc(milvus_query_duration_seconds))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "__name__": true
+              },
+              "indexByName": {},
+              "renameByName": {
+                "trace_id": "Trace ID",
+                "Value": "Duration (s)",
+                "collection_id": "Collection",
+                "num_segments": "Segments"
+              }
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Duration (s)",
+              "desc": true
+            }
+          ]
+        },
+        "links": [
+          {
+            "title": "View in Jaeger",
+            "url": "http://jaeger-ui:16686/trace/${__data.fields[\"Trace ID\"]}"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Query Success Rate",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_query_total{status=\"success\"}[5m])) / sum(rate(milvus_query_total[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 99
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Average Query Latency",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "avg(rate(milvus_query_duration_seconds_sum[5m]) / rate(milvus_query_duration_seconds_count[5m])) * 1000",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "red",
+                  "value": 100
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "P99 Query Latency",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(milvus_query_duration_seconds_bucket[5m])) by (le)) * 1000",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 80
+                },
+                {
+                  "color": "red",
+                  "value": 150
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Queries Per Second",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_query_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": [
+              "lastNotNull"
+            ]
+          },
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": 0
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Delegator Search Duration",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(milvus_delegator_search_duration_seconds_bucket[5m])) by (le, channel))",
+            "legendFormat": "P50 - {{channel}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_delegator_search_duration_seconds_bucket[5m])) by (le, channel))",
+            "legendFormat": "P95 - {{channel}}",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(milvus_delegator_search_duration_seconds_bucket[5m])) by (le, channel))",
+            "legendFormat": "P99 - {{channel}}",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Duration"
+          },
+          {
+            "format": "short"
+          }
+        ],
+        "legend": {
+          "show": true,
+          "values": true,
+          "min": false,
+          "max": true,
+          "current": true,
+          "total": false,
+          "avg": true
+        }
+      },
+      {
+        "id": 10,
+        "title": "Trace Completeness Rate",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_traces_exported_total[5m])) / sum(rate(milvus_query_total[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 90
+                },
+                {
+                  "color": "green",
+                  "value": 99
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Prometheus",
+            "value": "Prometheus"
+          }
+        },
+        {
+          "name": "collection_id",
+          "type": "query",
+          "datasource": "$datasource",
+          "query": "label_values(milvus_query_duration_seconds, collection_id)",
+          "multi": true,
+          "includeAll": true,
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          }
+        },
+        {
+          "name": "node_id",
+          "type": "query",
+          "datasource": "$datasource",
+          "query": "label_values(milvus_query_duration_seconds, node_id)",
+          "multi": true,
+          "includeAll": true,
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "$datasource",
+          "enable": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "expr": "changes(milvus_build_info[5m]) > 0",
+          "tagKeys": "version",
+          "textFormat": "Deployment"
+        }
+      ]
+    }
+  }
+}

@@ -27,6 +27,7 @@ import (
 
 	"github.com/milvus-io/milvus-proto/go-api/v2/commonpb"
 	"github.com/milvus-io/milvus/internal/querynodev2/delegator"
+	"github.com/milvus-io/milvus/internal/querynodev2/observability"
 	"github.com/milvus-io/milvus/internal/querynodev2/segments"
 	"github.com/milvus-io/milvus/internal/querynodev2/tasks"
 	"github.com/milvus-io/milvus/internal/util/reduce"
@@ -410,47 +411,69 @@ func (node *QueryNode) searchChannel(ctx context.Context, req *querypb.SearchReq
 
 	// From Proxy
 	tr := timerecord.NewTimeRecorder("searchDelegator")
-	// get delegator
-	sd, ok := node.delegators.Get(channel)
-	if !ok {
-		err := merr.WrapErrChannelNotFound(channel)
-		log.Warn("Query failed, failed to get shard delegator for search", zap.Error(err))
-		return nil, err
-	}
-	// do search
-	results, err := sd.Search(searchCtx, req)
-	if err != nil {
-		log.Warn("failed to search on delegator", zap.Error(err))
-		return nil, err
-	}
 
-	// reduce result
-	tr.CtxElapse(ctx, fmt.Sprintf("start reduce query result, traceID = %s,  vChannel = %s, segmentIDs = %v",
-		traceID,
-		channel,
-		req.GetSegmentIDs(),
-	))
+	// Initialize search tracer for distributed profiling
+	searchTracer := observability.NewSearchTracer()
 
-	resp, err := segments.ReduceSearchOnQueryNode(ctx, results,
-		reduce.NewReduceSearchResultInfo(req.GetReq().GetNq(),
-			req.GetReq().GetTopk()).WithMetricType(req.GetReq().GetMetricType()).WithGroupByField(req.GetReq().GetGroupByFieldId()).
-			WithGroupSize(req.GetReq().GetGroupSize()).WithAdvance(req.GetReq().GetIsAdvanced()))
-	if err != nil {
-		return nil, err
-	}
+	// Wrap entire search operation with tracing
+	return searchTracer.TraceSearch(searchCtx, req, func(ctx context.Context) (*internalpb.SearchResults, error) {
+		// get delegator
+		sd, ok := node.delegators.Get(channel)
+		if !ok {
+			err := merr.WrapErrChannelNotFound(channel)
+			log.Warn("Query failed, failed to get shard delegator for search", zap.Error(err))
+			return nil, err
+		}
 
-	tr.CtxElapse(ctx, fmt.Sprintf("do search with channel done , vChannel = %s, segmentIDs = %v",
-		channel,
-		req.GetSegmentIDs(),
-	))
+		// Trace delegator search
+		results, searchErr := searchTracer.TraceDelegatorSearch(ctx, channel, func(ctx context.Context) (*internalpb.SearchResults, error) {
+			// do search
+			return sd.Search(ctx, req)
+		})
 
-	// update metric to prometheus
-	latency := tr.ElapseSpan()
-	metrics.QueryNodeSQReqLatency.WithLabelValues(fmt.Sprint(node.GetNodeID()), metrics.SearchLabel, metrics.Leader).Observe(float64(latency.Milliseconds()))
-	metrics.QueryNodeSQCount.WithLabelValues(fmt.Sprint(node.GetNodeID()), metrics.SearchLabel, metrics.SuccessLabel, metrics.Leader, fmt.Sprint(req.GetReq().GetCollectionID())).Inc()
-	metrics.QueryNodeSearchNQ.WithLabelValues(fmt.Sprint(node.GetNodeID())).Observe(float64(req.Req.GetNq()))
-	metrics.QueryNodeSearchTopK.WithLabelValues(fmt.Sprint(node.GetNodeID())).Observe(float64(req.Req.GetTopk()))
-	return resp, nil
+		if searchErr != nil {
+			log.Warn("failed to search on delegator", zap.Error(searchErr))
+			err = searchErr
+			return nil, searchErr
+		}
+
+		// reduce result
+		tr.CtxElapse(ctx, fmt.Sprintf("start reduce query result, traceID = %s,  vChannel = %s, segmentIDs = %v",
+			traceID,
+			channel,
+			req.GetSegmentIDs(),
+		))
+
+		var resp *internalpb.SearchResults
+		var reduceErr error
+
+		// Trace result merging
+		mergeErr := searchTracer.TraceMergeResults(ctx, len(results), func(ctx context.Context) error {
+			resp, reduceErr = segments.ReduceSearchOnQueryNode(ctx, results,
+				reduce.NewReduceSearchResultInfo(req.GetReq().GetNq(),
+					req.GetReq().GetTopk()).WithMetricType(req.GetReq().GetMetricType()).WithGroupByField(req.GetReq().GetGroupByFieldId()).
+					WithGroupSize(req.GetReq().GetGroupSize()).WithAdvance(req.GetReq().GetIsAdvanced()))
+			return reduceErr
+		})
+
+		if mergeErr != nil {
+			err = mergeErr
+			return nil, mergeErr
+		}
+
+		tr.CtxElapse(ctx, fmt.Sprintf("do search with channel done , vChannel = %s, segmentIDs = %v",
+			channel,
+			req.GetSegmentIDs(),
+		))
+
+		// update metric to prometheus
+		latency := tr.ElapseSpan()
+		metrics.QueryNodeSQReqLatency.WithLabelValues(fmt.Sprint(node.GetNodeID()), metrics.SearchLabel, metrics.Leader).Observe(float64(latency.Milliseconds()))
+		metrics.QueryNodeSQCount.WithLabelValues(fmt.Sprint(node.GetNodeID()), metrics.SearchLabel, metrics.SuccessLabel, metrics.Leader, fmt.Sprint(req.GetReq().GetCollectionID())).Inc()
+		metrics.QueryNodeSearchNQ.WithLabelValues(fmt.Sprint(node.GetNodeID())).Observe(float64(req.Req.GetNq()))
+		metrics.QueryNodeSearchTopK.WithLabelValues(fmt.Sprint(node.GetNodeID())).Observe(float64(req.Req.GetTopk()))
+		return resp, nil
+	})
 }
 
 func (node *QueryNode) getChannelStatistics(ctx context.Context, req *querypb.GetStatisticsRequest, channel string) (*internalpb.GetStatisticsResponse, error) {
