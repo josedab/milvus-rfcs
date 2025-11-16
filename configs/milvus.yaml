@@ -443,6 +443,21 @@ queryCoord:
     serverMaxRecvSize: 268435456 # The maximum size of each RPC request that the queryCoord can receive, unit: byte
     clientMaxSendSize: 268435456 # The maximum size of each RPC request that the clients on queryCoord can send, unit: byte
     clientMaxRecvSize: 536870912 # The maximum size of each RPC request that the clients on queryCoord can receive, unit: byte
+  # Adaptive query routing configuration for intelligent node selection based on real-time metrics
+  adaptiveRouting:
+    enabled: false # Enable adaptive query routing. When enabled, queries are routed based on node health, cache locality, and load.
+    # Scoring weights for node selection (must sum to 1.0)
+    cpuWeight: 0.3 # Weight for CPU usage in routing score calculation (0.0-1.0)
+    memoryWeight: 0.2 # Weight for memory usage in routing score calculation (0.0-1.0)
+    cacheWeight: 0.3 # Weight for cache locality in routing score calculation (0.0-1.0)
+    latencyWeight: 0.2 # Weight for historical latency in routing score calculation (0.0-1.0)
+    # Health thresholds
+    maxCPUUsage: 0.9 # Maximum CPU usage threshold for node health check (0.0-1.0). Nodes above this threshold are excluded.
+    maxMemoryUsage: 0.85 # Maximum memory usage threshold for node health check (0.0-1.0). Nodes above this threshold are excluded.
+    minHealthScore: 0.3 # Minimum health score for a node to be considered for routing (0.0-1.0)
+    # Update intervals
+    metricsUpdateInterval: 5 # Interval in seconds for updating node metrics from QueryNodes
+    rebalanceInterval: 30 # Interval in seconds for recomputing routing decisions
 
 # Related configuration of queryNode, used to run hybrid search between vector and scalar data.
 queryNode:

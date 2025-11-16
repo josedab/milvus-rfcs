@@ -2387,6 +2387,18 @@ type queryCoordConfig struct {
 	QueryNodeTaskParallelismFactor ParamItem `refreshable:"true"`
 
 	BalanceCheckCollectionMaxCount ParamItem `refreshable:"true"`
+
+	// ---- Adaptive Routing ---
+	EnableAdaptiveRouting          ParamItem `refreshable:"true"`
+	AdaptiveRoutingCPUWeight       ParamItem `refreshable:"true"`
+	AdaptiveRoutingMemoryWeight    ParamItem `refreshable:"true"`
+	AdaptiveRoutingCacheWeight     ParamItem `refreshable:"true"`
+	AdaptiveRoutingLatencyWeight   ParamItem `refreshable:"true"`
+	AdaptiveRoutingMaxCPUUsage     ParamItem `refreshable:"true"`
+	AdaptiveRoutingMaxMemoryUsage  ParamItem `refreshable:"true"`
+	AdaptiveRoutingMinHealthScore  ParamItem `refreshable:"true"`
+	AdaptiveRoutingMetricsInterval ParamItem `refreshable:"true"`
+	AdaptiveRoutingRebalanceInterval ParamItem `refreshable:"true"`
 }
 
 func (p *queryCoordConfig) init(base *BaseTable) {
@@ -3028,6 +3040,97 @@ If this parameter is set false, Milvus simply searches the growing segments with
 		Export:       false,
 	}
 	p.BalanceCheckCollectionMaxCount.Init(base.mgr)
+
+	// ---- Adaptive Routing ---
+	p.EnableAdaptiveRouting = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.enabled",
+		Version:      "2.7.0",
+		DefaultValue: "false",
+		Doc:          "enable adaptive query routing based on real-time node metrics",
+		Export:       true,
+	}
+	p.EnableAdaptiveRouting.Init(base.mgr)
+
+	p.AdaptiveRoutingCPUWeight = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.cpuWeight",
+		Version:      "2.7.0",
+		DefaultValue: "0.3",
+		Doc:          "weight for CPU usage in adaptive routing score calculation",
+		Export:       true,
+	}
+	p.AdaptiveRoutingCPUWeight.Init(base.mgr)
+
+	p.AdaptiveRoutingMemoryWeight = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.memoryWeight",
+		Version:      "2.7.0",
+		DefaultValue: "0.2",
+		Doc:          "weight for memory usage in adaptive routing score calculation",
+		Export:       true,
+	}
+	p.AdaptiveRoutingMemoryWeight.Init(base.mgr)
+
+	p.AdaptiveRoutingCacheWeight = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.cacheWeight",
+		Version:      "2.7.0",
+		DefaultValue: "0.3",
+		Doc:          "weight for cache locality in adaptive routing score calculation",
+		Export:       true,
+	}
+	p.AdaptiveRoutingCacheWeight.Init(base.mgr)
+
+	p.AdaptiveRoutingLatencyWeight = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.latencyWeight",
+		Version:      "2.7.0",
+		DefaultValue: "0.2",
+		Doc:          "weight for historical latency in adaptive routing score calculation",
+		Export:       true,
+	}
+	p.AdaptiveRoutingLatencyWeight.Init(base.mgr)
+
+	p.AdaptiveRoutingMaxCPUUsage = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.maxCPUUsage",
+		Version:      "2.7.0",
+		DefaultValue: "0.9",
+		Doc:          "maximum CPU usage threshold for node health check (0.0-1.0)",
+		Export:       true,
+	}
+	p.AdaptiveRoutingMaxCPUUsage.Init(base.mgr)
+
+	p.AdaptiveRoutingMaxMemoryUsage = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.maxMemoryUsage",
+		Version:      "2.7.0",
+		DefaultValue: "0.85",
+		Doc:          "maximum memory usage threshold for node health check (0.0-1.0)",
+		Export:       true,
+	}
+	p.AdaptiveRoutingMaxMemoryUsage.Init(base.mgr)
+
+	p.AdaptiveRoutingMinHealthScore = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.minHealthScore",
+		Version:      "2.7.0",
+		DefaultValue: "0.3",
+		Doc:          "minimum health score for a node to be considered for routing (0.0-1.0)",
+		Export:       true,
+	}
+	p.AdaptiveRoutingMinHealthScore.Init(base.mgr)
+
+	p.AdaptiveRoutingMetricsInterval = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.metricsUpdateInterval",
+		Version:      "2.7.0",
+		DefaultValue: "5",
+		Doc:          "interval in seconds for updating node metrics",
+		Export:       true,
+	}
+	p.AdaptiveRoutingMetricsInterval.Init(base.mgr)
+
+	p.AdaptiveRoutingRebalanceInterval = ParamItem{
+		Key:          "queryCoord.adaptiveRouting.rebalanceInterval",
+		Version:      "2.7.0",
+		DefaultValue: "30",
+		Doc:          "interval in seconds for recomputing routing decisions",
+		Export:       true,
+	}
+	p.AdaptiveRoutingRebalanceInterval.Init(base.mgr)
 }
 
 // /////////////////////////////////////////////////////////////////////////////
