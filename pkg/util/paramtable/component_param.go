@@ -4429,6 +4429,18 @@ type dataCoordConfig struct {
 	ClusteringCompactionMaxClusterSizeRatio    ParamItem `refreshable:"true"`
 	ClusteringCompactionMaxClusterSize         ParamItem `refreshable:"true"`
 
+	// Smart Compaction Scheduling
+	SmartCompactionEnabled              ParamItem `refreshable:"true"`
+	SmartCompactionPeakQPSThreshold     ParamItem `refreshable:"true"`
+	SmartCompactionMinQPSForCompaction  ParamItem `refreshable:"true"`
+	SmartCompactionPeakHours            ParamItem `refreshable:"true"`
+	SmartCompactionOffPeakHours         ParamItem `refreshable:"true"`
+	SmartCompactionColdSegmentHours     ParamItem `refreshable:"true"`
+	SmartCompactionMinColdSegments      ParamItem `refreshable:"true"`
+	SmartCompactionMaxDeferralHours     ParamItem `refreshable:"true"`
+	SmartCompactionMaxDeferralCount     ParamItem `refreshable:"true"`
+	SmartCompactionColdSegmentEnabled   ParamItem `refreshable:"true"`
+
 	// LevelZero Segment
 	LevelZeroCompactionTriggerMinSize        ParamItem `refreshable:"true"`
 	LevelZeroCompactionTriggerMaxSize        ParamItem `refreshable:"true"`
@@ -5105,6 +5117,97 @@ During compaction, the size of segment # of rows is able to exceed segment max #
 		Export:       true,
 	}
 	p.ClusteringCompactionMaxClusterSize.Init(base.mgr)
+
+	// Smart Compaction Scheduling
+	p.SmartCompactionEnabled = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.enabled",
+		Version:      "2.5.0",
+		DefaultValue: "false",
+		Doc:          "Enable smart compaction scheduling based on query load and time of day",
+		Export:       true,
+	}
+	p.SmartCompactionEnabled.Init(base.mgr)
+
+	p.SmartCompactionPeakQPSThreshold = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.peakQPSThreshold",
+		Version:      "2.5.0",
+		DefaultValue: "1000",
+		Doc:          "Don't run compaction when QPS exceeds this threshold",
+		Export:       true,
+	}
+	p.SmartCompactionPeakQPSThreshold.Init(base.mgr)
+
+	p.SmartCompactionMinQPSForCompaction = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.minQPSForCompaction",
+		Version:      "2.5.0",
+		DefaultValue: "200",
+		Doc:          "Safe to run compaction when QPS is below this threshold",
+		Export:       true,
+	}
+	p.SmartCompactionMinQPSForCompaction.Init(base.mgr)
+
+	p.SmartCompactionPeakHours = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.peakHours",
+		Version:      "2.5.0",
+		DefaultValue: "9,10,11,12,13,14,15,16,17",
+		Doc:          "Peak hours (avoid compaction during these hours), comma-separated list of hours (0-23)",
+		Export:       true,
+	}
+	p.SmartCompactionPeakHours.Init(base.mgr)
+
+	p.SmartCompactionOffPeakHours = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.offPeakHours",
+		Version:      "2.5.0",
+		DefaultValue: "0,1,2,3,4,5,6",
+		Doc:          "Off-peak hours (preferred for compaction), comma-separated list of hours (0-23)",
+		Export:       true,
+	}
+	p.SmartCompactionOffPeakHours.Init(base.mgr)
+
+	p.SmartCompactionColdSegmentHours = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.coldSegmentHours",
+		Version:      "2.5.0",
+		DefaultValue: "1",
+		Doc:          "Number of hours without access for a segment to be considered cold",
+		Export:       true,
+	}
+	p.SmartCompactionColdSegmentHours.Init(base.mgr)
+
+	p.SmartCompactionMinColdSegments = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.minColdSegments",
+		Version:      "2.5.0",
+		DefaultValue: "5",
+		Doc:          "Minimum number of cold segments required to trigger compaction",
+		Export:       true,
+	}
+	p.SmartCompactionMinColdSegments.Init(base.mgr)
+
+	p.SmartCompactionMaxDeferralHours = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.maxDeferralHours",
+		Version:      "2.5.0",
+		DefaultValue: "12",
+		Doc:          "Force compaction if deferred for more than this many hours",
+		Export:       true,
+	}
+	p.SmartCompactionMaxDeferralHours.Init(base.mgr)
+
+	p.SmartCompactionMaxDeferralCount = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.maxDeferralCount",
+		Version:      "2.5.0",
+		DefaultValue: "20",
+		Doc:          "Force compaction after this many deferrals",
+		Export:       true,
+	}
+	p.SmartCompactionMaxDeferralCount.Init(base.mgr)
+
+	p.SmartCompactionColdSegmentEnabled = ParamItem{
+		Key:          "dataCoord.compaction.smartScheduling.coldSegmentEnabled",
+		Version:      "2.5.0",
+		DefaultValue: "true",
+		Doc:          "Enable cold segment analysis for prioritizing compaction",
+		Export:       true,
+	}
+	p.SmartCompactionColdSegmentEnabled.Init(base.mgr)
 
 	p.EnableGarbageCollection = ParamItem{
 		Key:          "dataCoord.enableGarbageCollection",

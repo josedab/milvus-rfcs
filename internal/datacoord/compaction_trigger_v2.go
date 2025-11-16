@@ -104,6 +104,9 @@ type CompactionTriggerManager struct {
 	clusteringPolicy *clusteringCompactionPolicy
 	singlePolicy     *singleCompactionPolicy
 
+	// Smart compaction scheduler
+	smartScheduler *SmartCompactionScheduler
+
 	cancel  context.CancelFunc
 	closeWg sync.WaitGroup
 
@@ -131,6 +134,7 @@ func NewCompactionTriggerManager(alloc allocator.Allocator, handler Handler, ins
 	m.l0Policy = newL0CompactionPolicy(meta, alloc)
 	m.clusteringPolicy = newClusteringCompactionPolicy(meta, m.allocator, m.handler)
 	m.singlePolicy = newSingleCompactionPolicy(meta, m.allocator, m.handler)
+	m.smartScheduler = NewSmartCompactionScheduler()
 	return m
 }
 
@@ -155,6 +159,9 @@ func (m *CompactionTriggerManager) Stop() {
 		m.cancel()
 	}
 	m.closeWg.Wait()
+	if m.smartScheduler != nil {
+		m.smartScheduler.Stop()
+	}
 }
 
 func (m *CompactionTriggerManager) pauseL0SegmentCompacting(jobID, collectionID int64) {
@@ -239,6 +246,19 @@ func (m *CompactionTriggerManager) loop(ctx context.Context) {
 				log.RatedInfo(10, "Skip trigger l0 compaction since inspector is full")
 				continue
 			}
+			// Check smart scheduler
+			if m.smartScheduler != nil {
+				decision := m.smartScheduler.ShouldCompact(ctx, "L0")
+				if !decision.ShouldRun {
+					log.Debug("Smart scheduler deferred L0 compaction",
+						zap.String("reason", decision.Reason),
+						zap.Time("deferUntil", decision.DeferUntil))
+					continue
+				}
+				log.Info("Smart scheduler approved L0 compaction",
+					zap.String("reason", decision.Reason),
+					zap.String("priority", decision.Priority))
+			}
 			m.setL0Triggering(true)
 			events, err := m.l0Policy.Trigger(ctx)
 			if err != nil {
@@ -260,6 +280,19 @@ func (m *CompactionTriggerManager) loop(ctx context.Context) {
 				log.RatedInfo(10, "Skip trigger clustering compaction since inspector is full")
 				continue
 			}
+			// Check smart scheduler
+			if m.smartScheduler != nil {
+				decision := m.smartScheduler.ShouldCompact(ctx, "Clustering")
+				if !decision.ShouldRun {
+					log.Debug("Smart scheduler deferred clustering compaction",
+						zap.String("reason", decision.Reason),
+						zap.Time("deferUntil", decision.DeferUntil))
+					continue
+				}
+				log.Info("Smart scheduler approved clustering compaction",
+					zap.String("reason", decision.Reason),
+					zap.String("priority", decision.Priority))
+			}
 			events, err := m.clusteringPolicy.Trigger(ctx)
 			if err != nil {
 				log.Warn("Fail to trigger clustering policy", zap.Error(err))
@@ -277,6 +310,19 @@ func (m *CompactionTriggerManager) loop(ctx context.Context) {
 			if m.inspector.isFull() {
 				log.RatedInfo(10, "Skip trigger single compaction since inspector is full")
 				continue
+			}
+			// Check smart scheduler
+			if m.smartScheduler != nil {
+				decision := m.smartScheduler.ShouldCompact(ctx, "Single")
+				if !decision.ShouldRun {
+					log.Debug("Smart scheduler deferred single compaction",
+						zap.String("reason", decision.Reason),
+						zap.Time("deferUntil", decision.DeferUntil))
+					continue
+				}
+				log.Info("Smart scheduler approved single compaction",
+					zap.String("reason", decision.Reason),
+					zap.String("priority", decision.Priority))
 			}
 			events, err := m.singlePolicy.Trigger(ctx)
 			if err != nil {
