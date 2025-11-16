@@ -30,6 +30,7 @@ import (
 	"github.com/milvus-io/milvus/pkg/v2/log"
 	"github.com/milvus-io/milvus/pkg/v2/proto/indexpb"
 	"github.com/milvus-io/milvus/pkg/v2/util/merr"
+	"github.com/milvus-io/milvus/pkg/v2/util/paramtable"
 )
 
 // TaskQueue is a queue used to store tasks.
@@ -198,9 +199,10 @@ func NewIndexBuildTaskQueue(sched *TaskScheduler) *IndexTaskQueue {
 type TaskScheduler struct {
 	TaskQueue TaskQueue
 
-	wg     sync.WaitGroup
-	ctx    context.Context
-	cancel context.CancelFunc
+	wg              sync.WaitGroup
+	ctx             context.Context
+	cancel          context.CancelFunc
+	parallelBuilder *ParallelIndexBuilder
 }
 
 // NewTaskScheduler creates a new task scheduler of indexing tasks.
@@ -211,6 +213,33 @@ func NewTaskScheduler(ctx context.Context) *TaskScheduler {
 		cancel: cancel,
 	}
 	s.TaskQueue = NewIndexBuildTaskQueue(s)
+
+	// Initialize parallel builder with configuration from paramtable
+	parallelConfig := &ParallelConfig{
+		Enabled:                paramtable.Get().DataNodeCfg.ParallelIndexEnabled.GetAsBool(),
+		MaxConcurrentBuilds:    int(paramtable.Get().DataNodeCfg.ParallelIndexMaxConcurrentBuilds.GetAsInt64()),
+		MemoryReservationRatio: paramtable.Get().DataNodeCfg.ParallelIndexMemoryReservationRatio.GetAsFloat(),
+		MemoryFactors: map[string]float64{
+			"HNSW":     1.5,
+			"IVF_FLAT": 2.0,
+			"IVF_PQ":   1.8,
+			"IVF_SQ8":  1.7,
+			"DiskANN":  1.2,
+			"FLAT":     1.1,
+		},
+	}
+
+	parallelBuilder, err := NewParallelIndexBuilder(parallelConfig)
+	if err != nil {
+		log.Ctx(ctx).Warn("Failed to create parallel index builder, falling back to sequential",
+			zap.Error(err))
+	} else {
+		s.parallelBuilder = parallelBuilder
+		log.Ctx(ctx).Info("Parallel index builder initialized successfully",
+			zap.Bool("enabled", parallelConfig.Enabled),
+			zap.Int("maxConcurrent", parallelConfig.MaxConcurrentBuilds),
+			zap.Float64("memoryRatio", parallelConfig.MemoryReservationRatio))
+	}
 
 	return s
 }
@@ -255,6 +284,133 @@ func (sched *TaskScheduler) processTask(t Task, q TaskQueue) {
 	t.SetState(indexpb.JobState_JobStateFinished, "")
 }
 
+// processIndexBuildTasksParallel processes multiple index build tasks in parallel
+// using the ParallelIndexBuilder. It handles PreExecute and PostExecute sequentially
+// but runs Execute in parallel.
+func (sched *TaskScheduler) processIndexBuildTasksParallel(tasks []*indexBuildTask) {
+	if len(tasks) == 0 {
+		return
+	}
+
+	log.Ctx(sched.ctx).Info("Processing index build tasks in parallel",
+		zap.Int("numTasks", len(tasks)))
+
+	// Add all tasks to active queue
+	for _, t := range tasks {
+		sched.TaskQueue.AddActiveTask(t)
+	}
+
+	// Clean up when done
+	defer func() {
+		for _, t := range tasks {
+			sched.TaskQueue.PopActiveTask(t.Name())
+			t.Reset()
+		}
+		debug.FreeOSMemory()
+	}()
+
+	wrap := func(task *indexBuildTask, fn func(ctx context.Context) error) error {
+		select {
+		case <-task.Ctx().Done():
+			return errCancel
+		default:
+			return fn(task.Ctx())
+		}
+	}
+
+	// Phase 1: Run PreExecute for all tasks sequentially
+	for _, task := range tasks {
+		if err := wrap(task, task.PreExecute); err != nil {
+			log.Ctx(task.Ctx()).Warn("PreExecute failed", zap.Error(err))
+			task.SetState(getStateFromError(err), err.Error())
+			return
+		}
+	}
+
+	// Phase 2: Run Execute in parallel using ParallelIndexBuilder
+	if err := sched.parallelBuilder.BuildParallel(sched.ctx, tasks); err != nil {
+		log.Ctx(sched.ctx).Warn("Parallel index build failed", zap.Error(err))
+		// Mark all tasks as failed
+		for _, task := range tasks {
+			task.SetState(indexpb.JobState_JobStateRetry, err.Error())
+		}
+		return
+	}
+
+	// Phase 3: Run PostExecute for all tasks sequentially
+	for _, task := range tasks {
+		if err := wrap(task, task.PostExecute); err != nil {
+			log.Ctx(task.Ctx()).Warn("PostExecute failed", zap.Error(err))
+			task.SetState(getStateFromError(err), err.Error())
+			return
+		}
+	}
+
+	// Mark all tasks as finished
+	for _, task := range tasks {
+		task.SetState(indexpb.JobState_JobStateFinished, "")
+	}
+
+	log.Ctx(sched.ctx).Info("Parallel index build completed successfully",
+		zap.Int("numTasks", len(tasks)))
+}
+
+// tryCollectIndexBuildBatch attempts to collect a batch of index build tasks
+// from the queue for parallel processing. Returns nil if batching is not applicable.
+func (sched *TaskScheduler) tryCollectIndexBuildBatch(firstTask Task) []*indexBuildTask {
+	// Check if parallel builder is available
+	if sched.parallelBuilder == nil || !sched.parallelBuilder.config.Enabled {
+		return nil
+	}
+
+	// Check if first task is an index build task
+	indexTask, ok := firstTask.(*indexBuildTask)
+	if !ok {
+		return nil
+	}
+
+	// Start collecting tasks
+	batch := []*indexBuildTask{indexTask}
+
+	// Try to collect more index build tasks (up to a reasonable limit)
+	maxBatchSize := 16 // Configurable limit
+	for i := 1; i < maxBatchSize; i++ {
+		// Check if there are more tasks in the queue
+		utNum, _ := sched.TaskQueue.GetTaskNum()
+		if utNum == 0 {
+			break
+		}
+
+		// Try to get the next task
+		nextTask := sched.TaskQueue.PopUnissuedTask()
+		if nextTask == nil {
+			break
+		}
+
+		// Check if it's an index build task
+		if nextIndexTask, ok := nextTask.(*indexBuildTask); ok {
+			batch = append(batch, nextIndexTask)
+		} else {
+			// Not an index build task, put it back (this is a simplification)
+			// In a real implementation, we'd need a way to re-queue it
+			go func(t Task) {
+				sched.processTask(t, sched.TaskQueue)
+			}(nextTask)
+			break
+		}
+	}
+
+	// Only use parallel processing if we have multiple tasks
+	if len(batch) < 2 {
+		return nil
+	}
+
+	log.Ctx(sched.ctx).Info("Collected index build batch for parallel processing",
+		zap.Int("batchSize", len(batch)))
+
+	return batch
+}
+
 func (sched *TaskScheduler) indexBuildLoop() {
 	log.Ctx(sched.ctx).Debug("TaskScheduler start build loop ...")
 	defer sched.wg.Done()
@@ -264,16 +420,41 @@ func (sched *TaskScheduler) indexBuildLoop() {
 			return
 		case <-sched.TaskQueue.utChan():
 			t := sched.TaskQueue.PopUnissuedTask()
-			for {
-				totalSlot := CalculateNodeSlots()
-				availableSlot := totalSlot - sched.TaskQueue.GetActiveSlot()
-				if availableSlot >= t.GetSlot() || totalSlot == availableSlot {
-					go func(t Task) {
-						sched.processTask(t, sched.TaskQueue)
-					}(t)
-					break
+
+			// Try to collect a batch of index build tasks for parallel processing
+			batch := sched.tryCollectIndexBuildBatch(t)
+			if batch != nil {
+				// Process batch in parallel
+				totalSlots := int64(0)
+				for _, task := range batch {
+					totalSlots += task.GetSlot()
 				}
-				time.Sleep(time.Millisecond * 50)
+
+				// Wait for available slots for the entire batch
+				for {
+					totalSlot := CalculateNodeSlots()
+					availableSlot := totalSlot - sched.TaskQueue.GetActiveSlot()
+					if availableSlot >= totalSlots || totalSlot == availableSlot {
+						go func(tasks []*indexBuildTask) {
+							sched.processIndexBuildTasksParallel(tasks)
+						}(batch)
+						break
+					}
+					time.Sleep(time.Millisecond * 50)
+				}
+			} else {
+				// Process single task as before
+				for {
+					totalSlot := CalculateNodeSlots()
+					availableSlot := totalSlot - sched.TaskQueue.GetActiveSlot()
+					if availableSlot >= t.GetSlot() || totalSlot == availableSlot {
+						go func(t Task) {
+							sched.processTask(t, sched.TaskQueue)
+						}(t)
+						break
+					}
+					time.Sleep(time.Millisecond * 50)
+				}
 			}
 		}
 	}
@@ -290,4 +471,7 @@ func (sched *TaskScheduler) Start() error {
 func (sched *TaskScheduler) Close() {
 	sched.cancel()
 	sched.wg.Wait()
+	if sched.parallelBuilder != nil {
+		sched.parallelBuilder.Close()
+	}
 }

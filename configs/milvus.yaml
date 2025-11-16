@@ -798,6 +798,20 @@ dataNode:
     memoryBufferRatio: 0.3 # The ratio of memory buffer of clustering compaction. Data larger than threshold will be flushed to storage.
     workPoolSize: 8 # worker pool size for one clustering compaction job.
   bloomFilterApplyParallelFactor: 2 # parallel factor when to apply pk to bloom filter, default to 2*CPU_CORE_NUM
+  index:
+    # Parallel index building configuration
+    parallel:
+      enabled: true # Enable/disable parallel index building
+      maxConcurrentBuilds: 0 # Maximum concurrent index builds (0 = auto-detect based on CPU cores)
+      memoryReservationRatio: 0.8 # Percentage of memory to use for parallel builds (0.0-1.0)
+      # Memory factors for different index types (multiplier of raw data size during build)
+      memoryFactors:
+        HNSW: 1.5 # HNSW uses ~1.5x raw data size during build
+        IVF_FLAT: 2.0 # IVF_FLAT needs more memory for clustering
+        IVF_PQ: 1.8 # IVF_PQ slightly less than IVF_FLAT
+        IVF_SQ8: 1.7 # IVF_SQ8 quantization reduces memory
+        DiskANN: 1.2 # DiskANN is more memory-efficient
+        FLAT: 1.1 # FLAT has minimal overhead
   storage:
     deltalog: json # deltalog format, options: [json, parquet]
   ip:  # TCP/IP address of dataNode. If not specified, use the first unicastable address

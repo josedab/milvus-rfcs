@@ -5705,6 +5705,11 @@ type dataNodeConfig struct {
 	// index services config
 	BuildParallel ParamItem `refreshable:"false"`
 
+	// parallel index building
+	ParallelIndexEnabled               ParamItem `refreshable:"true"`
+	ParallelIndexMaxConcurrentBuilds   ParamItem `refreshable:"true"`
+	ParallelIndexMemoryReservationRatio ParamItem `refreshable:"true"`
+
 	WorkerSlotUnit      ParamItem `refreshable:"true"`
 	StandaloneSlotRatio ParamItem `refreshable:"false"`
 }
@@ -6143,6 +6148,33 @@ if this parameter <= 0, will set it as 10`,
 		Export:       true,
 	}
 	p.BuildParallel.Init(base.mgr)
+
+	p.ParallelIndexEnabled = ParamItem{
+		Key:          "dataNode.index.parallel.enabled",
+		Version:      "2.5.0",
+		DefaultValue: "true",
+		Doc:          "Enable/disable parallel index building",
+		Export:       true,
+	}
+	p.ParallelIndexEnabled.Init(base.mgr)
+
+	p.ParallelIndexMaxConcurrentBuilds = ParamItem{
+		Key:          "dataNode.index.parallel.maxConcurrentBuilds",
+		Version:      "2.5.0",
+		DefaultValue: "0",
+		Doc:          "Maximum concurrent index builds (0 = auto-detect based on CPU cores)",
+		Export:       true,
+	}
+	p.ParallelIndexMaxConcurrentBuilds.Init(base.mgr)
+
+	p.ParallelIndexMemoryReservationRatio = ParamItem{
+		Key:          "dataNode.index.parallel.memoryReservationRatio",
+		Version:      "2.5.0",
+		DefaultValue: "0.8",
+		Doc:          "Percentage of memory to use for parallel builds (0.0-1.0)",
+		Export:       true,
+	}
+	p.ParallelIndexMemoryReservationRatio.Init(base.mgr)
 
 	p.WorkerSlotUnit = ParamItem{
 		Key:          "dataNode.workerSlotUnit",
