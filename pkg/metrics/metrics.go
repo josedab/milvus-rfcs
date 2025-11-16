@@ -193,5 +193,11 @@ func Register(r prometheus.Registerer) {
 	r.MustRegister(BuildInfo)
 	r.MustRegister(RuntimeInfo)
 	r.MustRegister(ThreadNum)
+	// Register memory monitoring metrics
+	r.MustRegister(ComponentMemory)
+	r.MustRegister(IndexMemory)
+	r.MustRegister(SegmentMemory)
+	r.MustRegister(MemoryUsagePercent)
+	r.MustRegister(MemoryGrowthRate)
 	metricRegisterer = r
 }

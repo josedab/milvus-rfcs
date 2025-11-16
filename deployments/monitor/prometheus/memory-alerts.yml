@@ -1,0 +1,105 @@
+groups:
+  - name: milvus_memory_alerts
+    interval: 30s
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          milvus_memory_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: memory
+        annotations:
+          summary: "High memory usage on Milvus node {{ $labels.node_id }}"
+          description: |
+            Memory usage is at {{ $value | humanizePercentage }} on node {{ $labels.node_id }}.
+            This may lead to performance degradation or OOM conditions.
+            Current threshold: 85%
+
+      - alert: CriticalMemoryUsage
+        expr: |
+          milvus_memory_usage_percent > 90
+        for: 2m
+        labels:
+          severity: critical
+          component: memory
+        annotations:
+          summary: "Critical memory usage on Milvus node {{ $labels.node_id }}"
+          description: |
+            Memory usage is critically high at {{ $value | humanizePercentage }} on node {{ $labels.node_id }}.
+            OOM condition imminent. Immediate action required.
+            Current threshold: 90%
+
+      - alert: MemoryLeak
+        expr: |
+          milvus_memory_growth_bytes_per_hour > 104857600
+        for: 2h
+        labels:
+          severity: critical
+          component: memory
+        annotations:
+          summary: "Potential memory leak detected on Milvus node {{ $labels.node_id }}"
+          description: |
+            Memory is growing at {{ $value | humanize1024 }}/hour on node {{ $labels.node_id }}.
+            This indicates a potential memory leak that needs investigation.
+            Threshold: 100 MiB/hour for 2 hours continuously.
+
+      - alert: RapidMemoryGrowth
+        expr: |
+          rate(milvus_component_memory_bytes{component="total"}[5m]) * 3600 > 524288000
+        for: 10m
+        labels:
+          severity: warning
+          component: memory
+        annotations:
+          summary: "Rapid memory growth on Milvus node {{ $labels.node_id }}"
+          description: |
+            Memory is growing at {{ $value | humanize1024 }}/hour on node {{ $labels.node_id }}.
+            This rapid growth may indicate unusual activity or workload.
+            Threshold: 500 MiB/hour for 10 minutes.
+
+      - alert: MemoryApproachingLimit
+        expr: |
+          milvus_memory_usage_percent > 95
+        for: 1m
+        labels:
+          severity: critical
+          component: memory
+          page: true
+        annotations:
+          summary: "Memory usage approaching limit on Milvus node {{ $labels.node_id }}"
+          description: |
+            Memory usage is at {{ $value | humanizePercentage }} on node {{ $labels.node_id }}.
+            OOM killer may trigger at any moment. Immediate intervention required.
+            Consider:
+            - Reducing workload
+            - Scaling out
+            - Restarting the node with more memory
+
+      - alert: HeapMemoryHigh
+        expr: |
+          (milvus_component_memory_bytes{component="heap"} / ignoring(component) milvus_component_memory_bytes{component="total"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: memory
+        annotations:
+          summary: "High heap memory usage on Milvus node {{ $labels.node_id }}"
+          description: |
+            Heap memory is {{ $value | humanizePercentage }} of total memory on node {{ $labels.node_id }}.
+            This may indicate inefficient memory allocation or GC pressure.
+            Consider tuning GOGC or investigating memory allocations.
+
+      - alert: IndexMemoryHigh
+        expr: |
+          sum by (index_type) (milvus_index_memory_bytes) > 50000000000
+        for: 10m
+        labels:
+          severity: info
+          component: memory
+        annotations:
+          summary: "High memory usage for index type {{ $labels.index_type }}"
+          description: |
+            Index type {{ $labels.index_type }} is using {{ $value | humanize1024 }} of memory.
+            Threshold: 50 GiB
+            Consider optimizing index parameters or distributing load across more nodes.
