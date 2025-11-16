@@ -590,6 +590,29 @@ var (
 			nodeIDLabelName,
 		})
 
+	// RFC-0008: Enhanced index health metrics for QueryNode
+	IndexLoadDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.QueryNodeRole,
+			Name:      "index_load_duration_seconds",
+			Help:      "Index load duration by type and size",
+			Buckets:   prometheus.ExponentialBuckets(0.1, 2, 10),
+		},
+		[]string{"index_type", "segment_size_mb"},
+	)
+
+	IndexSearchLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.QueryNodeRole,
+			Name:      "index_search_latency_ms",
+			Help:      "Search latency by index type",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 12),
+		},
+		[]string{"index_type", "collection_id"},
+	)
+
 	// QueryNodeSegmentAccessTotal records the total number of search or query segments accessed.
 	QueryNodeSegmentAccessTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -874,6 +897,11 @@ func RegisterQueryNode(registry *prometheus.Registry) {
 	registry.MustRegister(StoppingBalanceSegmentNum)
 	registry.MustRegister(QueryNodeLoadSegmentConcurrency)
 	registry.MustRegister(QueryNodeLoadIndexLatency)
+
+	// RFC-0008: Enhanced index health metrics
+	registry.MustRegister(IndexLoadDuration)
+	registry.MustRegister(IndexSearchLatency)
+
 	registry.MustRegister(QueryNodeSegmentAccessTotal)
 	registry.MustRegister(QueryNodeSegmentAccessDuration)
 	registry.MustRegister(QueryNodeSegmentAccessGlobalDuration)

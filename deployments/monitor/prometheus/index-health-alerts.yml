@@ -1,0 +1,172 @@
+# RFC-0008: Index Health Metrics - Prometheus Alerting Rules
+# These alerts monitor index build success rates, load times, and search performance
+
+groups:
+  - name: milvus_index_health
+    interval: 30s
+    rules:
+      # Alert on high build failure rate
+      - alert: HighIndexBuildFailureRate
+        expr: |
+          sum(rate(milvus_indexnode_index_build_failure_total[10m])) by (index_type) /
+          (sum(rate(milvus_indexnode_index_build_success_total[10m])) by (index_type) +
+           sum(rate(milvus_indexnode_index_build_failure_total[10m])) by (index_type)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "High index build failure rate for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} has a {{ $value | humanizePercentage }} build failure rate (threshold: 10%)"
+          runbook: "Check index build logs for errors, verify resource availability, and check for data quality issues"
+
+      # Alert when build failure rate is critical
+      - alert: CriticalIndexBuildFailureRate
+        expr: |
+          sum(rate(milvus_indexnode_index_build_failure_total[10m])) by (index_type) /
+          (sum(rate(milvus_indexnode_index_build_success_total[10m])) by (index_type) +
+           sum(rate(milvus_indexnode_index_build_failure_total[10m])) by (index_type)) > 0.25
+        for: 5m
+        labels:
+          severity: critical
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "Critical index build failure rate for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} has a {{ $value | humanizePercentage }} build failure rate (threshold: 25%)"
+          runbook: "CRITICAL: More than 1 in 4 builds failing. Immediate investigation required. Check for system issues, resource exhaustion, or data corruption"
+
+      # Alert on slow index loading
+      - alert: SlowIndexLoading
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(milvus_querynode_index_load_duration_seconds_bucket[10m])) by (le, index_type)
+          ) > 60
+        for: 5m
+        labels:
+          severity: warning
+          component: querynode
+          category: index_health
+        annotations:
+          summary: "Slow index loading for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} p95 load time: {{ $value | humanizeDuration }} (threshold: 60s)"
+          runbook: "Check disk I/O performance, network bandwidth, and memory availability on QueryNodes"
+
+      # Alert on very slow index loading
+      - alert: VerySlowIndexLoading
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(milvus_querynode_index_load_duration_seconds_bucket[10m])) by (le, index_type)
+          ) > 300
+        for: 5m
+        labels:
+          severity: critical
+          component: querynode
+          category: index_health
+        annotations:
+          summary: "Very slow index loading for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} p95 load time: {{ $value | humanizeDuration }} (threshold: 300s)"
+          runbook: "CRITICAL: Index loading taking over 5 minutes. Check for disk failures, network issues, or resource exhaustion"
+
+      # Alert on degraded search performance
+      - alert: DegradedIndexSearchPerformance
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(milvus_querynode_index_search_latency_ms_bucket[5m])) by (le, index_type)
+          ) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: querynode
+          category: index_health
+        annotations:
+          summary: "Degraded search performance for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} p95 search latency: {{ $value }}ms (threshold: 1000ms)"
+          runbook: "Check CPU usage on QueryNodes, verify index quality, and review query patterns for optimization opportunities"
+
+      # Alert on critical search performance degradation
+      - alert: CriticalIndexSearchPerformance
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(milvus_querynode_index_search_latency_ms_bucket[5m])) by (le, index_type)
+          ) > 5000
+        for: 5m
+        labels:
+          severity: critical
+          component: querynode
+          category: index_health
+        annotations:
+          summary: "Critical search performance degradation for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} p95 search latency: {{ $value }}ms (threshold: 5000ms)"
+          runbook: "CRITICAL: Search latency over 5 seconds. Immediate investigation required. Check for resource exhaustion, index corruption, or system issues"
+
+      # Alert on slow index build times
+      - alert: SlowIndexBuild
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(milvus_indexnode_index_build_duration_seconds_bucket[10m])) by (le, index_type)
+          ) > 3600
+        for: 10m
+        labels:
+          severity: warning
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "Slow index build times for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} p95 build time: {{ $value | humanizeDuration }} (threshold: 1h)"
+          runbook: "Review index configuration for optimization, check CPU and memory availability, consider adjusting build parameters"
+
+      # Alert when no index builds are happening (possible stuck scheduler)
+      - alert: NoIndexBuildActivity
+        expr: |
+          sum(rate(milvus_indexnode_index_build_success_total[15m])) == 0 and
+          sum(rate(milvus_indexnode_index_build_failure_total[15m])) == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "No index build activity detected"
+          description: "No index builds (success or failure) detected for 30 minutes. The index scheduler may be stuck"
+          runbook: "Check IndexNode health, verify task queue status, and review scheduler logs for errors"
+
+      # Alert on high memory usage by indexes
+      - alert: HighIndexMemoryUsage
+        expr: |
+          sum(milvus_indexnode_index_memory_bytes) by (index_type) > 10737418240
+        for: 10m
+        labels:
+          severity: warning
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "High memory usage for {{ $labels.index_type }} indexes"
+          description: "Index type {{ $labels.index_type }} using {{ $value | humanize1024 }}B of memory (threshold: 10GB)"
+          runbook: "Monitor for memory leaks, consider scaling IndexNodes, or review index configuration"
+
+      # Alert when index build latency is increasing (potential degradation)
+      - alert: IndexBuildLatencyIncreasing
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(milvus_indexnode_index_build_duration_seconds_bucket[1h])) by (le, index_type)
+            )
+            -
+            histogram_quantile(0.95,
+              sum(rate(milvus_indexnode_index_build_duration_seconds_bucket[1h] offset 24h)) by (le, index_type)
+            )
+          ) /
+          histogram_quantile(0.95,
+            sum(rate(milvus_indexnode_index_build_duration_seconds_bucket[1h] offset 24h)) by (le, index_type)
+          ) > 0.5
+        for: 1h
+        labels:
+          severity: info
+          component: indexnode
+          category: index_health
+        annotations:
+          summary: "Index build latency increasing for {{ $labels.index_type }}"
+          description: "Index type {{ $labels.index_type }} build latency increased by {{ $value | humanizePercentage }} compared to 24h ago"
+          runbook: "Monitor trends, check for data size increases, review resource utilization, and plan capacity accordingly"

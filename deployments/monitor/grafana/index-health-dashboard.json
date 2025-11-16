@@ -1,0 +1,303 @@
+{
+  "dashboard": {
+    "title": "Milvus Index Health Metrics (RFC-0008)",
+    "description": "Comprehensive index lifecycle tracking: build success/failure rates, load times, query performance per index type",
+    "tags": ["milvus", "index", "health", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Index Build Success Rate",
+        "type": "gauge",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_indexnode_index_build_success_total[5m])) by (index_type) / (sum(rate(milvus_indexnode_index_build_success_total[5m])) by (index_type) + sum(rate(milvus_indexnode_index_build_failure_total[5m])) by (index_type))",
+            "legendFormat": "{{index_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "red"
+                },
+                {
+                  "value": 0.90,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.95,
+                  "color": "green"
+                }
+              ]
+            },
+            "min": 0,
+            "max": 1
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Index Build Duration by Type (p95)",
+        "type": "bargauge",
+        "gridPos": {
+          "x": 8,
+          "y": 0,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_indexnode_index_build_duration_seconds_bucket[10m])) by (le, index_type))",
+            "legendFormat": "{{index_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": 0,
+                  "color": "green"
+                },
+                {
+                  "value": 300,
+                  "color": "yellow"
+                },
+                {
+                  "value": 600,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Index Build Failures by Type",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 16,
+          "y": 0,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_indexnode_index_build_failure_total[5m])) by (index_type, error_type)",
+            "legendFormat": "{{index_type}} - {{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Search Latency by Index Type (p95)",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_querynode_index_search_latency_ms_bucket[5m])) by (le, index_type))",
+            "legendFormat": "{{index_type}} (p95)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(milvus_querynode_index_search_latency_ms_bucket[5m])) by (le, index_type))",
+            "legendFormat": "{{index_type}} (p99)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "fillOpacity": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Index Load Duration by Type (p95)",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 12,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(milvus_querynode_index_load_duration_seconds_bucket[10m])) by (le, index_type))",
+            "legendFormat": "{{index_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Index Memory Usage by Type",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 0,
+          "y": 16,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(milvus_indexnode_index_memory_bytes) by (index_type)",
+            "legendFormat": "{{index_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "fillOpacity": 0,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Index Build Rate by Type",
+        "type": "timeseries",
+        "gridPos": {
+          "x": 12,
+          "y": 16,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_indexnode_index_build_success_total[5m])) by (index_type)",
+            "legendFormat": "{{index_type}} (success)",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(milvus_indexnode_index_build_failure_total[5m])) by (index_type)",
+            "legendFormat": "{{index_type}} (failure)",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "fillOpacity": 10,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Index Load Duration by Segment Size",
+        "type": "heatmap",
+        "gridPos": {
+          "x": 0,
+          "y": 24,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(milvus_querynode_index_load_duration_seconds_bucket[5m])) by (le, segment_size_mb)",
+            "legendFormat": "{{segment_size_mb}}MB",
+            "format": "heatmap",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "calculate": true,
+          "cellGap": 2,
+          "color": {
+            "mode": "scheme",
+            "scheme": "Spectral"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h"]
+    }
+  }
+}

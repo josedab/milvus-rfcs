@@ -328,6 +328,48 @@ var (
 			Buckets:   indexBucket,
 		}, []string{nodeIDLabelName})
 
+	// RFC-0008: Enhanced index health metrics
+	IndexBuildDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.IndexNodeRole,
+			Name:      "index_build_duration_seconds",
+			Help:      "Index build duration by type and collection",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 12), // 1s to ~1h
+		},
+		[]string{"index_type", "collection_id"},
+	)
+
+	IndexBuildSuccess = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.IndexNodeRole,
+			Name:      "index_build_success_total",
+			Help:      "Successful index builds",
+		},
+		[]string{"index_type"},
+	)
+
+	IndexBuildFailure = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.IndexNodeRole,
+			Name:      "index_build_failure_total",
+			Help:      "Failed index builds",
+		},
+		[]string{"index_type", "error_type"},
+	)
+
+	IndexMemoryBytes = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: milvusNamespace,
+			Subsystem: typeutil.IndexNodeRole,
+			Name:      "index_memory_bytes",
+			Help:      "Memory used by index",
+		},
+		[]string{"index_type", "segment_id"},
+	)
+
 	DataNodeSlot = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: milvusNamespace,
@@ -385,6 +427,12 @@ func registerDataNodeOnce(registry *prometheus.Registry) {
 	registry.MustRegister(DataNodeBuildIndexLatency)
 	registry.MustRegister(DataNodeBuildJSONStatsLatency)
 	registry.MustRegister(DataNodeSlot)
+
+	// RFC-0008: Enhanced index health metrics
+	registry.MustRegister(IndexBuildDuration)
+	registry.MustRegister(IndexBuildSuccess)
+	registry.MustRegister(IndexBuildFailure)
+	registry.MustRegister(IndexMemoryBytes)
 }
 
 func CleanupDataNodeCollectionMetrics(nodeID int64, collectionID int64, channel string) {
