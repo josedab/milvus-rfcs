@@ -492,3 +492,103 @@ func TestValidatePartitionKeyIsolation(t *testing.T) {
 		})
 	}
 }
+
+func TestFloatRangeOverlap(t *testing.T) {
+	tests := []struct {
+		name     string
+		range1   *FloatRange
+		range2   *FloatRange
+		expected bool
+	}{
+		{
+			name:     "overlapping ranges",
+			range1:   NewFloatRange(1.0, 10.0, true, true),
+			range2:   NewFloatRange(5.0, 15.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "non-overlapping ranges",
+			range1:   NewFloatRange(1.0, 5.0, true, true),
+			range2:   NewFloatRange(10.0, 15.0, true, true),
+			expected: false,
+		},
+		{
+			name:     "touching ranges",
+			range1:   NewFloatRange(1.0, 5.0, true, true),
+			range2:   NewFloatRange(5.0, 10.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "one range contains another",
+			range1:   NewFloatRange(1.0, 20.0, true, true),
+			range2:   NewFloatRange(5.0, 10.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "negative ranges",
+			range1:   NewFloatRange(-10.0, -5.0, true, true),
+			range2:   NewFloatRange(-7.0, -3.0, true, true),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FloatRangeOverlap(tt.range1, tt.range2)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestDoubleRangeOverlap(t *testing.T) {
+	tests := []struct {
+		name     string
+		range1   *DoubleRange
+		range2   *DoubleRange
+		expected bool
+	}{
+		{
+			name:     "overlapping ranges",
+			range1:   NewDoubleRange(1.0, 10.0, true, true),
+			range2:   NewDoubleRange(5.0, 15.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "non-overlapping ranges",
+			range1:   NewDoubleRange(1.0, 5.0, true, true),
+			range2:   NewDoubleRange(10.0, 15.0, true, true),
+			expected: false,
+		},
+		{
+			name:     "touching ranges",
+			range1:   NewDoubleRange(1.0, 5.0, true, true),
+			range2:   NewDoubleRange(5.0, 10.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "one range contains another",
+			range1:   NewDoubleRange(1.0, 20.0, true, true),
+			range2:   NewDoubleRange(5.0, 10.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "negative ranges",
+			range1:   NewDoubleRange(-10.0, -5.0, true, true),
+			range2:   NewDoubleRange(-7.0, -3.0, true, true),
+			expected: true,
+		},
+		{
+			name:     "high precision ranges",
+			range1:   NewDoubleRange(1.123456789, 1.987654321, true, true),
+			range2:   NewDoubleRange(1.5, 2.0, true, true),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DoubleRangeOverlap(tt.range1, tt.range2)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

@@ -319,7 +319,19 @@ func FilterSegmentsOnScalarField(partitionStats *storage.PartitionStatsSnapshot,
 				targetRange := tRange.ToIntRange()
 				statRange := exprutil.NewIntRange(min.GetValue().(int64), max.GetValue().(int64), true, true)
 				return exprutil.IntRangeOverlap(targetRange, statRange)
-			// todo: add float/double/timestmaptz pruner
+			case schemapb.DataType_Float:
+				targetRange := tRange.ToFloatRange()
+				statRange := exprutil.NewFloatRange(min.GetValue().(float32), max.GetValue().(float32), true, true)
+				return exprutil.FloatRangeOverlap(targetRange, statRange)
+			case schemapb.DataType_Double:
+				targetRange := tRange.ToDoubleRange()
+				statRange := exprutil.NewDoubleRange(min.GetValue().(float64), max.GetValue().(float64), true, true)
+				return exprutil.DoubleRangeOverlap(targetRange, statRange)
+			case schemapb.DataType_Timestamptz:
+				// Timestamptz is stored as int64, so we can use IntRange for pruning
+				targetRange := tRange.ToIntRange()
+				statRange := exprutil.NewIntRange(min.GetValue().(int64), max.GetValue().(int64), true, true)
+				return exprutil.IntRangeOverlap(targetRange, statRange)
 			case schemapb.DataType_String, schemapb.DataType_VarChar:
 				targetRange := tRange.ToStrRange()
 				statRange := exprutil.NewStrRange(min.GetValue().(string), max.GetValue().(string), true, true)

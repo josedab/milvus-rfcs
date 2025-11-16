@@ -205,6 +205,46 @@ func (planRange *PlanRange) ToStrRange() *StrRange {
 	return sRange
 }
 
+func (planRange *PlanRange) ToFloatRange() *FloatRange {
+	fRange := &FloatRange{}
+	if planRange.lower == nil {
+		fRange.lower = -math.MaxFloat32
+		fRange.includeLower = false
+	} else {
+		fRange.lower = planRange.lower.GetFloatVal()
+		fRange.includeLower = planRange.includeLower
+	}
+
+	if planRange.upper == nil {
+		fRange.upper = math.MaxFloat32
+		fRange.includeUpper = false
+	} else {
+		fRange.upper = planRange.upper.GetFloatVal()
+		fRange.includeUpper = planRange.includeUpper
+	}
+	return fRange
+}
+
+func (planRange *PlanRange) ToDoubleRange() *DoubleRange {
+	dRange := &DoubleRange{}
+	if planRange.lower == nil {
+		dRange.lower = -math.MaxFloat64
+		dRange.includeLower = false
+	} else {
+		dRange.lower = planRange.lower.GetDoubleVal()
+		dRange.includeLower = planRange.includeLower
+	}
+
+	if planRange.upper == nil {
+		dRange.upper = math.MaxFloat64
+		dRange.includeUpper = false
+	} else {
+		dRange.upper = planRange.upper.GetDoubleVal()
+		dRange.includeUpper = planRange.includeUpper
+	}
+	return dRange
+}
+
 type IntRange struct {
 	lower        int64
 	upper        int64
@@ -262,6 +302,70 @@ func StrRangeOverlap(range1 *StrRange, range2 *StrRange) bool {
 	}
 	var rightBound string
 	if range1.upper < range2.upper || range2.upper == "" {
+		rightBound = range1.upper
+	} else {
+		rightBound = range2.upper
+	}
+	return leftBound <= rightBound
+}
+
+type FloatRange struct {
+	lower        float32
+	upper        float32
+	includeLower bool
+	includeUpper bool
+}
+
+func NewFloatRange(l float32, r float32, includeL bool, includeR bool) *FloatRange {
+	return &FloatRange{
+		lower:        l,
+		upper:        r,
+		includeLower: includeL,
+		includeUpper: includeR,
+	}
+}
+
+func FloatRangeOverlap(range1 *FloatRange, range2 *FloatRange) bool {
+	var leftBound float32
+	if range1.lower < range2.lower {
+		leftBound = range2.lower
+	} else {
+		leftBound = range1.lower
+	}
+	var rightBound float32
+	if range1.upper < range2.upper {
+		rightBound = range1.upper
+	} else {
+		rightBound = range2.upper
+	}
+	return leftBound <= rightBound
+}
+
+type DoubleRange struct {
+	lower        float64
+	upper        float64
+	includeLower bool
+	includeUpper bool
+}
+
+func NewDoubleRange(l float64, r float64, includeL bool, includeR bool) *DoubleRange {
+	return &DoubleRange{
+		lower:        l,
+		upper:        r,
+		includeLower: includeL,
+		includeUpper: includeR,
+	}
+}
+
+func DoubleRangeOverlap(range1 *DoubleRange, range2 *DoubleRange) bool {
+	var leftBound float64
+	if range1.lower < range2.lower {
+		leftBound = range2.lower
+	} else {
+		leftBound = range1.lower
+	}
+	var rightBound float64
+	if range1.upper < range2.upper {
 		rightBound = range1.upper
 	} else {
 		rightBound = range2.upper
